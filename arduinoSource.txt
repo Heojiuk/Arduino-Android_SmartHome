@@ -1,0 +1,345 @@
+#include <SoftwareSerial.h>
+#include <Servo.h>
+#include <DHT11.h>
+
+SoftwareSerial BTSerial(11, 12);
+Servo windowServo;
+Servo doorServo;
+//서보모터 핀 정의
+//창문
+int windowPin = 5;
+int doorPin = 8;
+
+int speakerPin = 3; //피에조부저 핀 정의
+
+int moterON = 9; //DC모터 정방향 핀 정의
+int moterOFF = 10; //DC모터 역방향 핀 정의
+
+int ledPin = 4;  //LED 핀 정의
+int lightSensor = A0;  //조도센서 핀 정의
+int sensorValue = 0; //조도센서 값을 대입하는 변수 정의
+
+int tempPin = 2; //온습도 센서 핀 정의
+
+int waveTrigerPin = 6; //초음파 센서 핀 정의
+int waveEchoPin = 7; //초음파 센서 핀 정의
+
+//피에조부저
+int noteDuration = 250;
+
+boolean ledState, fanState, windowState, doorState, secureState;
+DHT11 dht11(tempPin);
+
+//블루투스 수신 문자열
+String str = "";
+
+
+void setup()
+{
+  Serial.begin(9600);
+  BTSerial.begin(9600);
+  pinMode(ledPin, OUTPUT);
+  pinMode(moterON, OUTPUT);
+  pinMode(moterOFF, OUTPUT);
+  pinMode(waveTrigerPin, OUTPUT);
+  pinMode(waveEchoPin, INPUT);
+}
+
+void loop()
+{
+  sendTemp();
+
+  int windowAngle = windowServo.read();
+  if (windowAngle != '\0') {
+    Serial.print("windowAngle = ");
+    Serial.println(windowAngle);
+  }
+
+  int doorAngle = doorServo.read();
+  if (doorAngle != '\0') {
+    Serial.print("doorAngle = ");
+    Serial.println(doorAngle);
+  }
+
+  //수신 데이터 처리
+  if (BTSerial.available()) {
+    char data = BTSerial.read();
+    if (data == '\n') {
+
+      if (str.length() > .0) {
+        str += data;
+        delay(5);
+        Serial.print("초기값 :");
+        Serial.println(str);
+        switch (str.toInt()) {
+          //Android application button control code
+          case 0:
+
+            allOFF();
+            break;
+
+          case 1:
+            if (ledState == LOW) {
+              Serial.print(str);
+              Serial.println(",  전등을 킵니다.");
+              ledLight(ledPin, 70);
+              Serial.print("ledState = ");
+              Serial.println(ledState);
+              break;
+            } else if (ledState == HIGH) {
+              Serial.print(str);
+              Serial.print(",  전등을 끕니다.");
+              ledLight(ledPin, 0);
+              Serial.print("ledState = ");
+              Serial.println(ledState);
+              break;
+            }
+
+          case 2:
+            Serial.print(str);
+            Serial.print(",  전등을 끕니다.");
+            ledLight(ledPin, 0);
+            Serial.print("ledState = ");
+            Serial.println(ledState);
+            break;
+
+          case 3:
+            if (fanState == LOW) {
+              Serial.print(str);
+              Serial.print(",  선풍기를 킵니다.");
+              fanAuto(26);
+              Serial.print("fanState = ");
+              Serial.println(fanState);
+              break;
+            } else if (fanState == HIGH) {
+              Serial.print(str);
+              Serial.print(",  선풍기를 끕니다.");
+              fanAuto(21);
+              Serial.print("fanState = ");
+              Serial.println(fanState);
+              break;
+            }
+          case 4:
+            Serial.print(str);
+            Serial.print(",  선풍기를 끕니다.");
+            fanAuto(21);
+            Serial.print("fanState = ");
+            Serial.println(fanState);
+            break;
+
+          case 5:
+            securityMode();
+            Serial.print("secureState = ");
+            Serial.println(secureState);
+            break;
+
+          case 6:
+            if (windowState == HIGH) {
+              Serial.print(str);
+              Serial.print(",  창문을 엽니다.");
+              windowControl(2);
+              Serial.print("windowState = ");
+              Serial.println(windowState);
+              break;
+            } else if (windowState == LOW) {
+              Serial.print(str);
+              Serial.println(",  창문을 닫습니다.");
+              windowControl(85);
+              Serial.print("windowState = ");
+              Serial.println(windowState);
+              break;
+            }
+          case 7:
+            Serial.print(str);
+            Serial.println(",  창문을 닫습니다.");
+            windowControl(85);
+            Serial.print("windowState = ");
+            Serial.println(windowState);
+            break;
+
+          case 8:
+            if (doorState == LOW) {
+              Serial.print(str);
+              Serial.print(",  문을 엽니다.");
+              doorControl(90);
+              Serial.print("doorState = ");
+              Serial.println(doorState);
+              break;
+            } else if (doorState == HIGH) {
+              Serial.print(str);
+              Serial.print(",  문을 잡급니다.");
+              doorControl(2);
+              Serial.print("doorState = ");
+              Serial.println(doorState);
+              break;
+            }
+          case 9:
+            Serial.print(str);
+            Serial.print(",  문을 잡급니다.");
+            doorControl(90);
+            Serial.print("doorState = ");
+            Serial.println(doorState);
+            break;
+
+          default:
+            Serial.println("동작 오류, 명령어 확인바람.");
+            break;
+        }
+      }
+
+      str = "";
+    } else     str = str + data;
+  }
+
+}
+
+/****Function define code****/
+//온도 송신 함수
+
+void sendTemp() {
+  int err;
+
+  float temp, humi;
+  int ftoiTemp, ftoiHumi, sensorData;
+  int dataArray[] = {};
+
+  if (err = dht11.read(humi, temp) == 0)
+  {
+    ftoiTemp = int(temp);
+    ftoiHumi = int(humi);
+
+    dataArray[0] = ftoiTemp;
+    dataArray[1] = ftoiHumi;
+    Serial.print("temp : ");
+    Serial.println(dataArray[0]);
+
+    Serial.print("humi : ");
+    Serial.println(dataArray[1]);
+   // fanAuto(ftoiTemp);
+    sendData(ftoiTemp);
+    Serial.println();
+  }
+  else
+  {
+    Serial.println();
+    Serial.print("Error No :");
+    Serial.print(err);
+    Serial.println();
+  }
+  delay(500);
+}
+
+//자동 조명 시스템 함수
+void ledLight(int led, int sensorValue) {
+  if (sensorValue < 100) {
+    Serial.print("조도센서 : ");
+    Serial.print(sensorValue);
+    Serial.println("  ,  LED ON!");
+    analogWrite(led, sensorValue);
+    ledState = true;
+    Serial.println(ledState);
+  }
+  else {
+    Serial.print("조도센서 : ");
+    Serial.println(sensorValue);
+    Serial.print("  ,   LED OFF!");
+    analogWrite(led, 0);
+    ledState = false;
+    Serial.println(ledState);
+  }
+}
+
+//자동 공조 시스템 함수
+void fanAuto(int temp) {
+  if (temp > 25) {
+    Serial.println("선풍기 ON");
+    analogWrite(moterON, 150);
+    analogWrite(moterOFF, 0);
+    fanState = true;
+    Serial.println(fanState);
+  }
+  else {
+    Serial.println("선풍기 OFF");
+    analogWrite(moterON, 0);
+    analogWrite(moterOFF, 0);
+    fanState = false;
+    Serial.println(fanState);
+  }
+}
+
+//보안모드 함수
+void securityMode() {
+  // 초음파를 보낸다. 다 보내면 echo가 HIGH 상태로 대기하게 된다.
+  digitalWrite(waveTrigerPin, LOW);
+  digitalWrite(waveEchoPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(waveTrigerPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(waveTrigerPin, LOW);
+
+  // waveEchoPin 이 HIGH를 유지한 시간을 저장 한다.
+  unsigned long duration = pulseIn(waveEchoPin, HIGH);
+
+  // HIGH 였을 때 시간(초음파가 보냈다가 다시 들어온 시간)을 가지고 거리를 계산 한다.
+  float distance = ((float)(340 * duration) / 10000) / 2;
+
+  Serial.print(distance);
+  Serial.println("cm");
+  // 수정한 값을 출력
+  delay(10);
+
+  if (distance <= 4) {
+    for (int i = 0; i <= 5; i++) {
+      tone(speakerPin, 330, noteDuration);
+    }
+  }
+}
+
+//창문 제어 함수
+void windowControl(int angle) {
+  windowServo.attach(windowPin);
+  windowServo.write(angle);
+  delay(500);
+
+  windowServo.detach();
+
+  if (angle == 85) {
+    windowState = true;
+    Serial.println(windowState);
+  }
+  else if (angle == 2) {
+    windowState = false;
+    Serial.println(windowState);
+  }
+}
+
+void doorControl(int angle) {
+  doorServo.attach(doorPin);
+  doorServo.write(angle);
+  delay(500);
+
+  doorServo.detach();
+
+  if (angle == 90) {
+    doorState = true;
+  }
+  else if (angle == 2) {
+    doorState = false;
+  }
+}
+
+//전체 전원 OFF 함수
+void allOFF() {
+  ledLight(ledPin, 200);
+  fanAuto(0);
+  windowControl(85);
+
+  delay(500);
+}
+
+//블루투스 송신 함수
+void sendData(int value) {
+  String message = String(value) + '\n';
+
+  BTSerial.print(message);
+}
